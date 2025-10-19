@@ -95,10 +95,11 @@ async def test_load_balancing() -> Dict[str, Any]:
     results = []
     ip_counts = {}
 
-    # Make 20 calls to App B
-    async with httpx.AsyncClient() as client:
-        for i in range(20):
-            try:
+    # Make 20 calls to App B with NEW connections each time
+    for i in range(20):
+        try:
+            # Create new client for each request (forces new TCP connection)
+            async with httpx.AsyncClient() as client:
                 response = await client.get(f"{APP_B_URL}/diagnostic", timeout=10.0)
                 data = response.json()
                 pod_ip = data.get("client_ip", "unknown")
@@ -112,13 +113,13 @@ async def test_load_balancing() -> Dict[str, Any]:
                 # Count IPs
                 ip_counts[pod_ip] = ip_counts.get(pod_ip, 0) + 1
 
-            except Exception as e:
-                results.append({
-                    "call_number": i + 1,
-                    "pod_ip": None,
-                    "success": False,
-                    "error": str(e)
-                })
+        except Exception as e:
+            results.append({
+                "call_number": i + 1,
+                "pod_ip": None,
+                "success": False,
+                "error": str(e)
+            })
 
     # Analyze results
     unique_ips = len(ip_counts)
