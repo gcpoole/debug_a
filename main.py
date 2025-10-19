@@ -85,6 +85,60 @@ async def call_b(request: Request) -> Dict[str, Any]:
     }
 
 
+@app.get("/test-load-balancing")
+async def test_load_balancing() -> Dict[str, Any]:
+    """Make multiple calls to App B to test internal load balancing.
+
+    If load balancing works, we should see different pod IPs.
+    If not, all calls will go to the same pod.
+    """
+    results = []
+    ip_counts = {}
+
+    # Make 20 calls to App B
+    async with httpx.AsyncClient() as client:
+        for i in range(20):
+            try:
+                response = await client.get(f"{APP_B_URL}/diagnostic", timeout=10.0)
+                data = response.json()
+                pod_ip = data.get("client_ip", "unknown")
+
+                results.append({
+                    "call_number": i + 1,
+                    "pod_ip": pod_ip,
+                    "success": True
+                })
+
+                # Count IPs
+                ip_counts[pod_ip] = ip_counts.get(pod_ip, 0) + 1
+
+            except Exception as e:
+                results.append({
+                    "call_number": i + 1,
+                    "pod_ip": None,
+                    "success": False,
+                    "error": str(e)
+                })
+
+    # Analyze results
+    unique_ips = len(ip_counts)
+    load_balanced = unique_ips > 1
+
+    return {
+        "test_description": "Made 20 internal calls to test-header-b to check load balancing",
+        "app_b_instances_expected": 2,
+        "unique_pod_ips_seen": unique_ips,
+        "load_balancing_working": load_balanced,
+        "ip_distribution": ip_counts,
+        "detailed_results": results,
+        "conclusion": (
+            f"✅ Load balancing IS working - saw {unique_ips} different pod IPs"
+            if load_balanced
+            else f"❌ Load balancing NOT working - all calls went to same pod"
+        )
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint for Digital Ocean."""
