@@ -8,6 +8,8 @@ Used to compare external vs internal request headers and IPs.
 """
 
 import os
+import socket
+import asyncio
 import httpx
 from fastapi import FastAPI, Request
 from typing import Dict, Any
@@ -41,6 +43,12 @@ async def call_b(request: Request) -> Dict[str, Any]:
     - External request (browser/curl → App A through load balancer)
     - Internal request (App A → App B within VPC)
     """
+    # Get this pod's hostname
+    app_a_pod_name = socket.gethostname()
+
+    # Simulate being busy (2 second delay)
+    await asyncio.sleep(2)
+
     # Capture what App A received from external caller
     app_a_client_ip = request.client.host if request.client else "unknown"
     app_a_headers = dict(request.headers)
