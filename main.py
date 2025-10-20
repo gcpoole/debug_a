@@ -20,6 +20,9 @@ app = FastAPI(title="VPC Test App A - Request Chain Tracer")
 # Get App B URL from environment (internal VPC URL)
 APP_B_URL = os.getenv("APP_B_URL", "http://test-header-b:8080")
 
+# Get Function URL from environment (internal VPC URL - we'll test if this works!)
+FUNCTION_URL = os.getenv("FUNCTION_URL", "http://test-fibonacci:8080")
+
 
 @app.get("/")
 async def root():
@@ -156,6 +159,80 @@ async def test_load_balancing() -> Dict[str, Any]:
             if load_balanced
             else f"❌ Load balancing NOT working - all calls went to same pod"
         )
+    }
+
+
+@app.get("/call-function")
+async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
+    """Test calling the fibonacci function via internal VPC routing.
+
+    This endpoint tests if App Platform functions can be called via internal
+    service names, similar to how app-a calls app-b.
+
+    Query params:
+    - n: Fibonacci number to calculate (default 10)
+
+    Tests multiple possible internal URL patterns:
+    1. http://test-fibonacci:8080/__main__?n=N
+    2. http://test-fibonacci/__main__?n=N
+    3. http://test-fibonacci:8080?n=N
+    """
+    # Get this pod's info
+    app_a_pod_name = socket.gethostname()
+    app_a_client_ip = request.client.host if request.client else "unknown"
+
+    # Capture what App A received from external caller
+    app_a_headers = dict(request.headers)
+
+    # Test different URL patterns
+    url_patterns = [
+        f"http://test-fibonacci:8080/__main__?n={n}",
+        f"http://test-fibonacci/__main__?n={n}",
+        f"http://test-fibonacci:8080?n={n}",
+        f"{FUNCTION_URL}/__main__?n={n}",
+    ]
+
+    results = []
+
+    for url in url_patterns:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=10.0)
+                results.append({
+                    "url": url,
+                    "success": True,
+                    "status_code": response.status_code,
+                    "response": response.json() if response.status_code == 200 else response.text[:200]
+                })
+        except Exception as e:
+            results.append({
+                "url": url,
+                "success": False,
+                "error": str(e)[:200]
+            })
+
+    # Check if any succeeded
+    any_success = any(r["success"] and r.get("status_code") == 200 for r in results)
+
+    return {
+        "test_description": "Test calling fibonacci function via internal VPC service name",
+        "app_a_pod_name": app_a_pod_name,
+        "app_a_client_ip": app_a_client_ip,
+        "fibonacci_input": n,
+        "app_a_received": {
+            "description": "What App A saw from external caller",
+            "client_ip": app_a_client_ip,
+            "host_header": request.headers.get("host")
+        },
+        "internal_function_tests": results,
+        "conclusion": {
+            "any_pattern_worked": any_success,
+            "message": (
+                "✅ SUCCESS: Functions CAN be called via internal service name!"
+                if any_success
+                else "❌ FAILED: Functions cannot be called via internal service name (need alternative approach)"
+            )
+        }
     }
 
 
