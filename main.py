@@ -184,17 +184,22 @@ async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
     # Capture what App A received from external caller
     app_a_headers = dict(request.headers)
 
-    # Test different URL patterns
-    url_patterns = [
-        f"http://test-fibonacci:8080/__main__?n={n}",
-        f"http://test-fibonacci/__main__?n={n}",
-        f"http://test-fibonacci:8080?n={n}",
-        f"{FUNCTION_URL}/__main__?n={n}",
+    # Test different URL patterns (using correct /package/function path)
+    # First try internal VPC patterns
+    internal_patterns = [
+        f"http://test-fibonacci:8080/fibonacci/__main__?n={n}",
+        f"http://test-fibonacci/fibonacci/__main__?n={n}",
+        f"{FUNCTION_URL}/fibonacci/__main__?n={n}",
     ]
+
+    # Also test public URL to see what headers the function receives
+    # Format: /route/package/function
+    public_url = f"https://vpc-internal-lb-test-63mdu.ondigitalocean.app/fib/fibonacci/__main__?n={n}"
 
     results = []
 
-    for url in url_patterns:
+    # Test internal patterns
+    for url in internal_patterns:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, timeout=10.0)
@@ -211,11 +216,29 @@ async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
                 "error": str(e)[:200]
             })
 
-    # Check if any succeeded
-    any_success = any(r["success"] and r.get("status_code") == 200 for r in results)
+    # Test public URL (to see what headers/IP the function receives from VPC)
+    public_result = None
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(public_url, timeout=10.0)
+            public_result = {
+                "url": public_url,
+                "success": True,
+                "status_code": response.status_code,
+                "response": response.json() if response.status_code == 200 else response.text[:200]
+            }
+    except Exception as e:
+        public_result = {
+            "url": public_url,
+            "success": False,
+            "error": str(e)[:200]
+        }
+
+    # Check if any internal pattern succeeded
+    any_internal_success = any(r["success"] and r.get("status_code") == 200 for r in results)
 
     return {
-        "test_description": "Test calling fibonacci function via internal VPC service name",
+        "test_description": "Test calling fibonacci function via internal VPC service name AND public URL",
         "app_a_pod_name": app_a_pod_name,
         "app_a_client_ip": app_a_client_ip,
         "fibonacci_input": n,
@@ -225,12 +248,14 @@ async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
             "host_header": request.headers.get("host")
         },
         "internal_function_tests": results,
+        "public_url_test": public_result,
         "conclusion": {
-            "any_pattern_worked": any_success,
+            "internal_routing_works": any_internal_success,
+            "public_url_works": public_result and public_result.get("success") and public_result.get("status_code") == 200,
             "message": (
-                "✅ SUCCESS: Functions CAN be called via internal service name!"
-                if any_success
-                else "❌ FAILED: Functions cannot be called via internal service name (need alternative approach)"
+                "✅ Internal routing works!"
+                if any_internal_success
+                else "❌ Internal routing failed, but check public URL test for caller IP info"
             )
         }
     }
