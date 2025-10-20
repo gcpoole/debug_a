@@ -32,13 +32,16 @@ async def root():
 
 
 @app.get("/call-b")
-async def call_b(request: Request) -> Dict[str, Any]:
+async def call_b(request: Request, fib: int = None) -> Dict[str, Any]:
     """Receive external request, call App B internally, return both results.
 
     This endpoint:
     1. Captures what App A received from external caller
     2. Makes internal VPC call to App B
     3. Returns both sets of information for comparison
+
+    Query params:
+    - fib: Optional Fibonacci number to pass to App B for CPU load testing
 
     This allows us to see the difference between:
     - External request (browser/curl → App A through load balancer)
@@ -64,7 +67,10 @@ async def call_b(request: Request) -> Dict[str, Any]:
     # Make internal call to App B
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{APP_B_URL}/diagnostic", timeout=10.0)
+            # Add fib parameter if provided
+            url = f"{APP_B_URL}/diagnostic"
+            params = {"fib": fib} if fib is not None else {}
+            response = await client.get(url, params=params, timeout=60.0)
             app_b_response = response.json()
             call_success = True
             error_message = None
@@ -77,6 +83,7 @@ async def call_b(request: Request) -> Dict[str, Any]:
         "test_description": "External request to App A, which then calls App B internally",
         "app_a_pod_name": app_a_pod_name,
         "app_a_delay_seconds": app_a_delay,
+        "fib_param": fib,
         "app_a_received": {
             "description": "What App A saw from external caller (through load balancer)",
             "client_ip": app_a_client_ip,
@@ -86,6 +93,7 @@ async def call_b(request: Request) -> Dict[str, Any]:
         "internal_call_to_app_b": {
             "description": "App A called App B using internal VPC URL",
             "url_used": APP_B_URL,
+            "fib_passed_to_b": fib,
             "call_success": call_success,
             "error": error_message,
         },
