@@ -74,6 +74,7 @@ async def call_b(request: Request) -> Dict[str, Any]:
 
     return {
         "test_description": "External request to App A, which then calls App B internally",
+        "app_a_pod_name": app_a_pod_name,
         "app_a_received": {
             "description": "What App A saw from external caller (through load balancer)",
             "client_ip": app_a_client_ip,
