@@ -47,9 +47,8 @@ async def call_b(request: Request) -> Dict[str, Any]:
     # Get this pod's hostname
     app_a_pod_name = socket.gethostname()
 
-    # Simulate random load (1-10 second delay)
-    app_a_delay = random.randint(1, 10)
-    await asyncio.sleep(app_a_delay)
+    # NO delay in app-a - it processes immediately
+    app_a_delay = 0
 
     # Capture what App A received from external caller
     app_a_client_ip = request.client.host if request.client else "unknown"
