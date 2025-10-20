@@ -10,6 +10,7 @@ Used to compare external vs internal request headers and IPs.
 import os
 import socket
 import asyncio
+import random
 import httpx
 from fastapi import FastAPI, Request
 from typing import Dict, Any
@@ -46,8 +47,9 @@ async def call_b(request: Request) -> Dict[str, Any]:
     # Get this pod's hostname
     app_a_pod_name = socket.gethostname()
 
-    # Simulate being busy (2 second delay)
-    await asyncio.sleep(2)
+    # Simulate random load (1-3 second delay)
+    app_a_delay = random.randint(1, 3)
+    await asyncio.sleep(app_a_delay)
 
     # Capture what App A received from external caller
     app_a_client_ip = request.client.host if request.client else "unknown"
@@ -75,6 +77,7 @@ async def call_b(request: Request) -> Dict[str, Any]:
     return {
         "test_description": "External request to App A, which then calls App B internally",
         "app_a_pod_name": app_a_pod_name,
+        "app_a_delay_seconds": app_a_delay,
         "app_a_received": {
             "description": "What App A saw from external caller (through load balancer)",
             "client_ip": app_a_client_ip,
