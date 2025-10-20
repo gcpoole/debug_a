@@ -23,6 +23,9 @@ APP_B_URL = os.getenv("APP_B_URL", "http://test-header-b:8080")
 # Get Function URL from environment (internal VPC URL - we'll test if this works!)
 FUNCTION_URL = os.getenv("FUNCTION_URL", "http://test-fibonacci:8080")
 
+# Get API key for calling private functions
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
 
 @app.get("/")
 async def root():
@@ -216,13 +219,16 @@ async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
                 "error": str(e)[:200]
             })
 
-    # Test public URL (to see what headers/IP the function receives from VPC)
+    # Test public URL with API key authentication
     public_result = None
+    headers = {"X-API-Key": INTERNAL_API_KEY} if INTERNAL_API_KEY else {}
+
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(public_url, timeout=10.0)
+            response = await client.get(public_url, headers=headers, timeout=10.0)
             public_result = {
                 "url": public_url,
+                "api_key_provided": bool(INTERNAL_API_KEY),
                 "success": True,
                 "status_code": response.status_code,
                 "response": response.json() if response.status_code == 200 else response.text[:200]
@@ -230,6 +236,7 @@ async def call_function(request: Request, n: int = 10) -> Dict[str, Any]:
     except Exception as e:
         public_result = {
             "url": public_url,
+            "api_key_provided": bool(INTERNAL_API_KEY),
             "success": False,
             "error": str(e)[:200]
         }
